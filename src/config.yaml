@@ -1,0 +1,33 @@
+model:
+  backbones:
+    wideresnet50:
+      - "layer2"
+      - "layer3"
+    wideresnet101:
+       - "layer2"
+       - "layer3"
+    resnext101:
+       - "layer2"
+       - "layer3"
+    densenet201:
+       - "features.denseblock2"
+       - "features.denseblock3"
+  batch_size: 2
+  resize: 256
+  image_size: 224
+# resize: 366
+# image_size: 320
+  fp16: true
+
+  use_ivf:
+    enable: true
+    nprobe_scale: 100
+  embed_dim: 1024
+  patch_size: 3
+  gpu: 0
+  num_workers: 8
+  random_seed: 42
+
+datasets:
+  - "bottle"
+# - "grid"
