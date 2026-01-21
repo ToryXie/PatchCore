@@ -41,25 +41,31 @@ def save_metrics(csv_save_path: Path,
                  time_lst: list[dict[str, float]]) -> None:
     """Save evaluation metrics to a CSV file."""
     # AUROC metrics
-    anomaly_dict = {}
-    for r in result:
-        anomaly_type = r["dataset"]
-        if anomaly_type not in anomaly_dict:
-            anomaly_dict[anomaly_type] = []
-        anomaly_dict[anomaly_type].append(r["auroc"])
+    if len(result) > 0:
+        anomaly_dict = {}
+        for r in result:
+            anomaly_type = r["dataset"]
+            if anomaly_type not in anomaly_dict:
+                anomaly_dict[anomaly_type] = []
+            anomaly_dict[anomaly_type].append(r["auroc"])
 
-    auroc_data = [{
-        "anomaly_type": anomaly_type,
-        "auroc": np.mean(aurocs)
-    } for anomaly_type, aurocs in anomaly_dict.items()]
+        auroc_data = [{
+            "anomaly_type": anomaly_type,
+            "auroc": np.mean(aurocs)
+        } for anomaly_type, aurocs in anomaly_dict.items()]
 
-    auroc_df = pl.DataFrame(auroc_data)
-    avg_auroc = auroc_df["auroc"].mean()
-    avg_row = pl.DataFrame({
-        "anomaly_type": ["Average"],
-        "auroc": [avg_auroc]
-    })
-    auroc_df = pl.concat([auroc_df, avg_row])
+        auroc_df = pl.DataFrame(auroc_data)
+        avg_auroc = auroc_df["auroc"].mean()
+        avg_row = pl.DataFrame({
+            "anomaly_type": ["Average"],
+            "auroc": [avg_auroc]
+        })
+        auroc_df = pl.concat([auroc_df, avg_row])
+
+        auroc_csv = csv_save_path / "auroc_metrics.csv"
+        auroc_df.write_csv(auroc_csv)
+
+        LOGGER.info(f"✅ AUROC metrics saved to: {auroc_csv}")
 
     # Time metrics
     time_dict = {}
@@ -75,12 +81,9 @@ def save_metrics(csv_save_path: Path,
     } for key, values in time_dict.items()]
     time_df = pl.DataFrame(time_data)
 
-    auroc_csv = csv_save_path / "auroc_metrics.csv"
     time_csv = csv_save_path / "time_metrics.csv"
-    auroc_df.write_csv(auroc_csv)
     time_df.write_csv(time_csv)
 
-    LOGGER.info(f"✅ AUROC metrics saved to: {auroc_csv}")
     LOGGER.info(f"✅ Time metrics saved to: {time_csv}")
 
 

@@ -1,22 +1,54 @@
 model:
   backbones:
     wideresnet50:
-      - "layer2"
-      - "layer3"
-    wideresnet101:
-       - "layer2"
-       - "layer3"
-    resnext101:
-       - "layer2"
-       - "layer3"
-    densenet201:
-       - "features.denseblock2"
-       - "features.denseblock3"
+      layers:
+        - "layer2"
+        - "layer3"
+      resize: 256
+      image_size: 224
+#    wideresnet101:
+#      layers:
+#        - "layer2"
+#        - "layer3"
+#      resize: 256
+#      image_size: 224
+#    resnext101:
+#      layers:
+#        - "layer2"
+#        - "layer3"
+#      resize: 256
+#      image_size: 224
+#    densenet201:
+#      layers:
+#        - "features.denseblock2"
+#        - "features.denseblock3"
+#      resize: 256
+#      image_size: 224
+#    convnext_tiny:
+#      layers:
+#        - "features.3"
+#        - "features.4"
+#      resize: 236
+#      image_size: 224
+#    convnext_small:
+#      layers:
+#        - "features.3"
+#        - "features.4"
+#      resize: 230
+#      image_size: 224
+    convnext_base:
+      layers:
+        - "features.3"
+        - "features.4"
+      resize: 232
+      image_size: 224
+    convnext_large:
+      layers:
+        - "features.3"
+        - "features.4"
+      resize: 232
+      image_size: 224
   batch_size: 2
-  resize: 256
-  image_size: 224
-# resize: 366
-# image_size: 320
   fp16: true
 
   use_ivf:
@@ -30,4 +62,4 @@ model:
 
 datasets:
   - "bottle"
-# - "grid"
+  - "grid"

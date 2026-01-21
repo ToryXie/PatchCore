@@ -7,10 +7,8 @@ WORKDIR = Path(__file__).parent
 with open(WORKDIR / "config.yaml", 'r') as file:
     config = yaml.safe_load(file)
 
-BACKBONES: dict[str, list[str]] = config["model"]["backbones"]
+BACKBONES: dict[str, dict[str, list[str] | int]] = config["model"]["backbones"]
 BATCH_SIZE: int = config["model"]["batch_size"]
-RESIZE: int = config["model"]["resize"]
-IMAGE_SIZE: int = config["model"]["image_size"]
 FP16: bool = config["model"]["fp16"]
 
 USE_IVF: bool = config["model"]["use_ivf"]["enable"]

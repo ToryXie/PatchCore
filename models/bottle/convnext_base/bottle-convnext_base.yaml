@@ -1,0 +1,13 @@
+backbone:
+  convnext_base:
+    image_size: 224
+    layers:
+    - features.3
+    - features.4
+    resize: 232
+embed_dim: 1024
+fp16: true
+patch_size: 3
+use_ivf:
+  enable: true
+  nprobe_scale: 100

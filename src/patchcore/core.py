@@ -70,10 +70,12 @@ class PatchCore(nn.Module):
         _, patchcore_name = name.split("-")
         save_data = {
             "backbone": {
-                patchcore_name: self.layers
+                patchcore_name: {
+                    "layers": self.layers,
+                    "resize": self.resize,
+                    "image_size": self.image_size,
+                }
             },
-            "resize": self.resize,
-            "image_size": self.image_size,
             "fp16": self.use_half,
             "use_ivf": {
                 "enable": self.use_ivf,
@@ -87,11 +89,9 @@ class PatchCore(nn.Module):
 
         LOGGER.info(f"✅ Save model & config success: {name}.")
 
-    def load(self, model_path: Path) -> None:
+    def load(self, index_path: Path) -> None:
         """Load the saved model from the specified path."""
-        for file in model_path.iterdir():
-            if file.is_file() and file.suffix == ".index":
-                self.anomaly_scorer.load(file)
+        self.anomaly_scorer.load(index_path)
 
     def _fill_memory_bank(self, dataloader: DataLoader) -> None:
         """Construct the memory bank from the features extracted from the dataset."""

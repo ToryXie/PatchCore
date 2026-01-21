@@ -16,26 +16,45 @@ class FaissNN:
         self.search_index = None
         self.dimension = None
 
+        if faiss.get_num_gpus() < 1:
+            self.use_gpu = False
+        else:
+            self.use_gpu = True
+
     def fit(self, features: torch.Tensor) -> None:
         """Build the index using the provided features."""
         self.dimension = features.shape[-1]
 
         if self.use_ivf:
-            gpu_config = faiss.GpuIndexIVFFlatConfig()
-            gpu_config.device = self.gpu_device
-            self.search_index = faiss.GpuIndexIVFFlat(
-                faiss.StandardGpuResources(),
-                self.dimension,
-                features.shape[0] // 39,
-                faiss.METRIC_L2,
-                gpu_config
-            )
-            if not self.search_index.is_trained:
-                self.search_index.train(features.cpu().numpy())  # type: ignore
+            if self.use_gpu:
+                gpu_config = faiss.GpuIndexIVFFlatConfig()
+                gpu_config.device = self.gpu_device
+                self.search_index = faiss.GpuIndexIVFFlat(
+                    faiss.StandardGpuResources(),
+                    self.dimension,
+                    features.shape[0] // 39,
+                    faiss.METRIC_L2,
+                    gpu_config
+                )
+            else:
+                quantizer = faiss.IndexFlatL2(self.dimension)
+                self.search_index = faiss.IndexIVFFlat(
+                    quantizer,
+                    self.dimension,
+                    features.shape[0] // 39,
+                    faiss.METRIC_L2
+                )
+            self.search_index.train(features.cpu().numpy())  # type: ignore
         else:
-            gpu_config = faiss.GpuIndexFlatConfig()
-            gpu_config.device = self.gpu_device
-            self.search_index = faiss.GpuIndexFlatL2(faiss.StandardGpuResources(), self.dimension, gpu_config)
+            if self.use_gpu:
+                gpu_config = faiss.GpuIndexFlatConfig()
+                gpu_config.device = self.gpu_device
+                self.search_index = faiss.GpuIndexFlatL2(
+                    faiss.StandardGpuResources(),
+                    self.dimension, gpu_config
+                )
+            else:
+                self.search_index = faiss.IndexFlatL2(self.dimension)
         self.search_index.add(features.cpu().numpy())  # type: ignore
 
     def search(self, query_features: torch.Tensor, n_nearest_neighbours: int) -> torch.Tensor:
@@ -50,15 +69,21 @@ class FaissNN:
 
     def save(self, index_path: str) -> None:
         """Save the index to a file."""
-        faiss.write_index(faiss.index_gpu_to_cpu(self.search_index), index_path)
+        if self.use_gpu:
+            faiss.write_index(faiss.index_gpu_to_cpu(self.search_index), index_path)
+        else:
+            faiss.write_index(self.search_index, index_path)
 
     def load(self, index_path: str) -> None:
         """Load the index from a file onto the specified GPU."""
-        self.search_index = faiss.index_cpu_to_gpu(
-            faiss.StandardGpuResources(),
-            self.gpu_device,
-            faiss.read_index(index_path)
-        )
+        if self.use_gpu:
+            self.search_index = faiss.index_cpu_to_gpu(
+                faiss.StandardGpuResources(),
+                self.gpu_device,
+                faiss.read_index(index_path)
+            )
+        else:
+            self.search_index = faiss.read_index(index_path)
 
 
 class NearestNeighbourScorer:

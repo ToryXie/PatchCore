@@ -6,8 +6,8 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from config import (BACKBONES, BATCH_SIZE, DATASETS, EMBED_DIM, FP16, GPU_DEVICE, IMAGE_SIZE,
-                    NPROBE_SCALE, NUM_WORKERS, PATCH_SIZE, RANDOM_SEED, RESIZE, USE_IVF)
+from config import (BACKBONES, BATCH_SIZE, DATASETS, EMBED_DIM, FP16, GPU_DEVICE,
+                    NPROBE_SCALE, NUM_WORKERS, PATCH_SIZE, RANDOM_SEED, USE_IVF)
 from patchcore import backbones, core, datasets, metrics, sampler, utils
 
 logging.basicConfig(
@@ -35,9 +35,31 @@ def main():
     torch.cuda.manual_seed(RANDOM_SEED)
     LOGGER.info(f"✅ Random seed set to: {RANDOM_SEED}")
 
+    LOGGER.info("Loading backbone config...")
+    patchcore_list: list[dict[str, str | list[str] | int]] = []
+    for backbone_name, backbone_parameters in BACKBONES.items():
+        backbone = backbones.load(backbone_name)
+        assert backbone is not None, f"backbone is invalid or not exist: {backbone_name}."
+        backbone_layers: list[str] = backbone_parameters["layers"]
+        resize: int = backbone_parameters["resize"]
+        image_size: int = backbone_parameters["image_size"]
+
+        patchcore_list.append({
+            "name": backbone_name,
+            "layers": backbone_layers,
+            "resize": resize,
+            "image_size": image_size
+        })
+    LOGGER.info("✅ Backbone config loaded.")
+
     dataloaders: list[tuple[str, dict[str, DataLoader]]] = []
-    for sub_dataset in DATASETS:
-        training_dataset = datasets.PatchCoreDataset("train", sub_dataset, RESIZE, IMAGE_SIZE)
+    for i, sub_dataset in enumerate(DATASETS):
+        training_dataset = datasets.PatchCoreDataset(
+            "train",
+            sub_dataset,
+            patchcore_list[i]["resize"],
+            patchcore_list[i]["image_size"]
+        )
         training_dataloader = DataLoader(
             training_dataset,
             batch_size=BATCH_SIZE,
@@ -46,7 +68,12 @@ def main():
             pin_memory=True
         )
 
-        testing_dataset = datasets.PatchCoreDataset("test", sub_dataset, RESIZE, IMAGE_SIZE)
+        testing_dataset = datasets.PatchCoreDataset(
+            "test",
+            sub_dataset,
+            patchcore_list[i]["resize"],
+            patchcore_list[i]["image_size"]
+        )
         testing_dataloader = DataLoader(
             testing_dataset,
             batch_size=1,
@@ -57,45 +84,44 @@ def main():
         dataloaders.append((sub_dataset, {"training": training_dataloader, "testing": testing_dataloader}))
     LOGGER.info("✅ Dataloaders created.")
 
-    LOGGER.info("Loading backbone...")
-    patchcore_list: list[tuple[str, core.PatchCore]] = []
-    for backbone_name, backbone_layers in BACKBONES.items():
-        backbone = backbones.load(backbone_name)
-        assert backbone is not None, f"backbone is invalid or not exist: {backbone_name}."
-
-        patchcore_instance = core.PatchCore(
-            device,
-            backbone,
-            backbone_layers,
-            USE_IVF,
-            NPROBE_SCALE,
-            EMBED_DIM,
-            RESIZE,
-            IMAGE_SIZE,
-            sampler.ApproximateGreedyCoresetSampler(),
-            PATCH_SIZE,
-            FP16
-        )
-
-        patchcore_list.append((backbone_name, patchcore_instance))
-    LOGGER.info("✅ Backbone loaded.")
-
     for dataset_name, dataloader in dataloaders:
         LOGGER.info(f"Current Dataset: {dataset_name.upper()}")
 
-        for i, (patchcore_name, patchcore) in enumerate(patchcore_list):
-            LOGGER.info(f"Training models: {patchcore_name} ({i + 1}/{len(patchcore_list)})")
-            patchcore.fit(dataloader["training"])
+        for i, patchcore_dict in enumerate(patchcore_list):
+            patchcore_name = patchcore_dict["name"]
+            LOGGER.info(f"Current model: {patchcore_name} ({i + 1}/{len(patchcore_list)})")
 
+            backbone_layers = patchcore_dict["layers"]
+            resize = patchcore_dict["resize"]
+            image_size = patchcore_dict["image_size"]
+            backbone = backbones.load(patchcore_name)
+
+            patchcore = core.PatchCore(
+                device,
+                backbone,
+                backbone_layers,
+                USE_IVF,
+                NPROBE_SCALE,
+                EMBED_DIM,
+                resize,
+                image_size,
+                sampler.ApproximateGreedyCoresetSampler(),
+                PATCH_SIZE,
+                FP16
+            )
+
+            # Training
+            LOGGER.info(f"Training model: {patchcore_name}")
+            patchcore.fit(dataloader["training"])
             LOGGER.info(f"✅ {patchcore_name} training done.")
 
-            patchcore_save_path = save_path / "models" / f"{dataset_name}_IM{IMAGE_SIZE}" / patchcore_name
+            patchcore_save_path = save_path / "models" / dataset_name / patchcore_name
             patchcore_save_path.mkdir(parents=True, exist_ok=True)
 
             patchcore.save(patchcore_save_path, f"{dataset_name}-{patchcore_name}")
 
-        for i, (patchcore_name, patchcore) in enumerate(patchcore_list):
-            LOGGER.info(f"Testing models: {patchcore_name} ({i + 1}/{len(patchcore_list)})")
+            # Testing
+            LOGGER.info(f"Testing model: {patchcore_name}")
             scores_lst, anomaly_type_lst, images_path_lst, masks_lst, masks_gt, time_lst = \
                 patchcore.predict(dataloader["testing"])
 
@@ -107,11 +133,13 @@ def main():
 
                 results.append(metrics.evaluate(anomaly_type_lst[idx], mask, masks_gt[idx]))
 
-            metrics_save_path = save_path / "results" / f"{dataset_name}_IM{IMAGE_SIZE}" / patchcore_name
+            metrics_save_path = save_path / "results" / dataset_name / patchcore_name
             metrics_save_path.mkdir(parents=True, exist_ok=True)
+            utils.save_metrics(metrics_save_path, results, time_lst)
             if len(results) > 0:
-                utils.save_metrics(metrics_save_path, results, time_lst)
                 utils.plot_roc_curves(metrics_save_path, dataset_name, patchcore_name, results)
+            else:
+                LOGGER.info("No masks detected, no roc metrics generated.")
 
             # Plotting
             for idx, anomaly_type in tqdm(enumerate(anomaly_type_lst), desc="Plotting...", total=len(anomaly_type_lst)):

@@ -1,12 +1,13 @@
 backbone:
   wideresnet50:
-  - layer2
-  - layer3
+    image_size: 224
+    layers:
+    - layer2
+    - layer3
+    resize: 256
 embed_dim: 1024
 fp16: true
-image_size: 224
 patch_size: 3
-resize: 256
 use_ivf:
   enable: true
   nprobe_scale: 100
