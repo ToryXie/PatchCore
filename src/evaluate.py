@@ -128,7 +128,7 @@ def main():
 
             results.append(metrics.evaluate(anomaly_type_lst[idx], mask, masks_gt[idx]))
 
-        metrics_save_path = save_path / dataset_name / patchcore_name
+        metrics_save_path = save_path / patchcore_name / dataset_name
         metrics_save_path.mkdir(parents=True, exist_ok=True)
         utils.save_metrics(metrics_save_path, results, time_lst)
         if len(results) > 0:
