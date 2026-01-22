@@ -67,6 +67,32 @@ def save_metrics(csv_save_path: Path,
 
         LOGGER.info(f"✅ AUROC metrics saved to: {auroc_csv}")
 
+        # AUPRC metrics
+        auprc_dict = {}
+        for r in result:
+            anomaly_type = r["dataset"]
+            if anomaly_type not in auprc_dict:
+                auprc_dict[anomaly_type] = []
+            auprc_dict[anomaly_type].append(r["auprc"])
+
+        auprc_data = [{
+            "anomaly_type": anomaly_type,
+            "auprc": np.mean(auprcs)
+        } for anomaly_type, auprcs in auprc_dict.items()]
+
+        auprc_df = pl.DataFrame(auprc_data)
+        avg_auprc = auprc_df["auprc"].mean()
+        avg_row = pl.DataFrame({
+            "anomaly_type": ["Average"],
+            "auprc": [avg_auprc]
+        })
+        auprc_df = pl.concat([auprc_df, avg_row])
+
+        auprc_csv = csv_save_path / "auprc_metrics.csv"
+        auprc_df.write_csv(auprc_csv)
+
+        LOGGER.info(f"✅ AUPRC metrics saved to: {auprc_csv}")
+
     # Time metrics
     time_dict = {}
     for time_item in time_lst:
@@ -87,31 +113,37 @@ def save_metrics(csv_save_path: Path,
     LOGGER.info(f"✅ Time metrics saved to: {time_csv}")
 
 
-def plot_roc_curves(roc_save_path: Path,
-                    dataset_name: str,
-                    patchcore_name: str,
-                    result: list[dict[str, float]]) -> None:
-    """Plot ROC curves."""
+def plot_curves(metrics_save_path: Path,
+                dataset_name: str,
+                patchcore_name: str,
+                result: list[dict[str, float]]) -> None:
+    """Plot ROC and PR curves."""
     anomaly_dict = {}
     for r in result:
         anomaly_type = r["dataset"]
         if anomaly_type not in anomaly_dict:
             anomaly_dict[anomaly_type] = {
                 "fpr_list": [],
-                "tpr_list": [],
-                "auroc_list": []
+                "roc_tpr_list": [],
+                "auroc_list": [],
+                "precision_list": [],
+                "prc_tpr_list": [],
+                "auprc_list": []
             }
         anomaly_dict[anomaly_type]["fpr_list"].append(r["fpr"])
-        anomaly_dict[anomaly_type]["tpr_list"].append(r["tpr"])
+        anomaly_dict[anomaly_type]["roc_tpr_list"].append(r["roc_tpr"])
         anomaly_dict[anomaly_type]["auroc_list"].append(r["auroc"])
+        anomaly_dict[anomaly_type]["precision_list"].append(r["precision"])
+        anomaly_dict[anomaly_type]["prc_tpr_list"].append(r["prc_tpr"])
+        anomaly_dict[anomaly_type]["auprc_list"].append(r["auprc"])
 
-    plt.figure(figsize=(10, 8))
-
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    # ROC Curve
     for anomaly_type, data in anomaly_dict.items():
         mean_fpr = np.linspace(0, 1, 100)
         tprs = []
 
-        for fpr, tpr in zip(data["fpr_list"], data["tpr_list"]):
+        for fpr, tpr in zip(data["fpr_list"], data["roc_tpr_list"]):
             tpr_interp = np.interp(mean_fpr, fpr, tpr)
             tpr_interp[0] = 0.0
             tprs.append(tpr_interp)
@@ -120,22 +152,47 @@ def plot_roc_curves(roc_save_path: Path,
         mean_tpr[-1] = 1.0
         mean_auroc = np.mean(data["auroc_list"])
 
-        plt.plot(mean_fpr, mean_tpr, linewidth=2,
+        ax1.plot(mean_fpr, mean_tpr, linewidth=2,
                  label=f'{anomaly_type} (AUC={mean_auroc:.4f})')
 
-    plt.xlim([0., 1.])
-    plt.ylim([0., 1.])
-    plt.xlabel('False Positive Rate', fontsize=12)
-    plt.ylabel('True Positive Rate', fontsize=12)
-    plt.title(f'ROC Curves - {dataset_name} ({patchcore_name})', fontsize=14)
-    plt.legend(loc="lower right", fontsize=10)
-    plt.grid(alpha=0.3)
+    ax1.plot([0, 1], [0, 1], 'k--', linewidth=1, label='Random')
+    ax1.set_xlim([0., 1.])
+    ax1.set_ylim([0., 1.])
+    ax1.set_xlabel('False Positive Rate', fontsize=12)
+    ax1.set_ylabel('True Positive Rate', fontsize=12)
+    ax1.set_title(f'ROC Curves - {dataset_name} ({patchcore_name})', fontsize=14)
+    ax1.legend(loc="lower right", fontsize=10)
+    ax1.grid(alpha=0.3)
 
-    roc_file = roc_save_path / 'roc_curves.png'
-    plt.savefig(roc_file, dpi=150, bbox_inches='tight')
+    # PR Curve
+    for anomaly_type, data in anomaly_dict.items():
+        mean_recall = np.linspace(0, 1, 100)
+        precisions = []
+
+        for recall, precision in zip(data["prc_tpr_list"], data["precision_list"]):
+            precision_interp = np.interp(mean_recall, recall[::-1], precision[::-1])
+            precisions.append(precision_interp)
+
+        mean_precision = np.mean(precisions, axis=0)
+        mean_auprc = np.mean(data["auprc_list"])
+
+        ax2.plot(mean_recall, mean_precision, linewidth=2,
+                 label=f'{anomaly_type} (AUC={mean_auprc:.4f})')
+
+    ax2.set_xlim([0., 1.])
+    ax2.set_ylim([0., 1.])
+    ax2.set_xlabel('Recall', fontsize=12)
+    ax2.set_ylabel('Precision', fontsize=12)
+    ax2.set_title(f'PR Curves - {dataset_name} ({patchcore_name})', fontsize=14)
+    ax2.legend(loc="lower left", fontsize=10)
+    ax2.grid(alpha=0.3)
+
+    plt.tight_layout()
+    curves_file = metrics_save_path / 'curves.png'
+    plt.savefig(curves_file, dpi=150, bbox_inches='tight')
     plt.close()
 
-    LOGGER.info(f"✅ ROC curves saved to: {roc_file}")
+    LOGGER.info(f"✅ ROC & PR curves saved to: {curves_file}")
 
 
 def plot_heatmap(save_path: Path,

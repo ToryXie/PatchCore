@@ -120,16 +120,45 @@ Original Paper: [Towards Total Recall in Industrial Anomaly Detection (Jun 2021)
 
 4. Train & Evaluate.
 
-   To train and evaluate the model, you can run the following commands:
+   **Dataset Structure**
 
-   * **Train the model**
+   Prepare your datasets in the following structure:
 
-     ```shell
-     uv run src/train.py
-     ```
+   ```
+   datasets
+   ├── bottle                 # <- Dataset category (corresponds to datasets in config.yaml)
+   │   ├── test               # <- Testing samples
+   │   │   ├── broken_large   # <- Defect category
+   │   │   │   ├── img        # <- Defect images
+   │   │   │   │   └── xxx.png
+   │   │   │   └── mask       # <- Defect masks (skip metric if not available)
+   │   │   │       └── xxx_mask.png
+   │   │   └── good           # <- Normal samples
+   │   │       └── xxx.png
+   │   └── train              # <- Training samples
+   │       └── xxx.png
+   └── grid
+       ├── test
+       │   └── bent           # <- Defect category
+       │       ├── img
+       │       │   └── xxx.png
+       │       └── mask
+       │           └── xxx_mask.png
+       └── train              # <- Training samples
+           └── xxx.png
+   ```
 
-   * **Evaluate the model**
+   **Training**
 
-     ```shell
-     sh evaluate.sh
-     ```
+   ```shell
+   uv run src/train.py
+   ```
+
+   **Evaluation**
+
+   Copy the trained model from `runs/train/exp[number]/models/` to `models/`, then run:
+
+   ```shell
+   sh evaluate.sh
+   ```
+

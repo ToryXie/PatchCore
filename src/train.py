@@ -137,7 +137,7 @@ def main():
             metrics_save_path.mkdir(parents=True, exist_ok=True)
             utils.save_metrics(metrics_save_path, results, time_lst)
             if len(results) > 0:
-                utils.plot_roc_curves(metrics_save_path, dataset_name, patchcore_name, results)
+                utils.plot_curves(metrics_save_path, dataset_name, patchcore_name, results)
             else:
                 LOGGER.info("No masks detected, no roc metrics generated.")
 
